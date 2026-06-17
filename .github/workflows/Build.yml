@@ -1,13 +1,13 @@
-name: Compilateur KernelSU Next 4.19
+name: Compilateur KernelSU Next Lineage 23.2 (sm8250)
 
 on:
-  workflow_dispatch: # Permet de lancer la compilation manuellement en un clic
+  workflow_dispatch: # Permet de lancer manuellement depuis l'onglet Actions
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Nettoyage et mise à jour de l'environnement
+    - name: Installation des dépendances Linux
       run: |
         sudo apt-get update
         sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.1-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo5
@@ -20,24 +20,30 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
 
-    - name: Clonage des sources du Noyau 4.19
+    - name: Clonage des sources du Noyau LineageOS sm8250
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        # REMPLACEZ l'URL et la branche par celles de votre appareil
-        git clone --depth=1 https://github.com/VOTRE_DEPOT/VOTRE_KERNEL.git -b votre_branche_lineage kernel-src
+        git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
 
     - name: Injection de KernelSU Next (Branche Legacy)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
-    - name: Configuration du defconfig
+    - name: Configuration du defconfig (vendor)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        # REMPLACEZ "votre_appareil_defconfig" par le nom exact de votre fichier
-        export DEFCONFIG_NAME="votre_appareil_defconfig"
         
-        cat << EOF >> arch/arm64/configs/$DEFCONFIG_NAME
+        # Le defconfig d'origine pour sm8250 se trouve généralement sous arch/arm64/configs/vendor/sm8250_defconfig
+        # ou un alias lié à l'appareil. Nous injectons les options à la fois dans la racine et vendor.
+        export DEFCONFIG_PATH="arch/arm64/configs/vendor/sm8250_defconfig"
+        
+        if [ ! -f "$DEFCONFIG_PATH" ]; then
+            # Solution de secours si la hiérarchie diffère
+            DEFCONFIG_PATH="arch/arm64/configs/sm8250_defconfig"
+        fi
+        
+        cat << EOF >> $DEFCONFIG_PATH
         CONFIG_MODULES=y
         CONFIG_KPROBES=y
         CONFIG_HAVE_KPROBES=y
@@ -54,13 +60,14 @@ jobs:
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-android-
         
-        export DEFCONFIG_NAME="votre_appareil_defconfig"
+        # Lancement de la configuration (Ajustez le nom si votre build utilise une variante spécifique)
+        make O=out vendor/sm8250_defconfig || make O=out sm8250_defconfig
         
-        make O=out $DEFCONFIG_NAME
+        # Compilation brute
         LTO=thin make O=out -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel_KernelSU_Next
+        name: Kernel_KernelSU_Next_sm8250
         path: ${{ github.workspace }}/kernel_workspace/kernel-src/out/arch/arm64/boot/Image.gz
