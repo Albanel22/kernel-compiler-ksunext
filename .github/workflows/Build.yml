@@ -11,12 +11,12 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo6
-    
+
     - name: Création de l'espace de travail et Téléchargement de Clang (LLVM)
       run: |
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
         cd $GITHUB_WORKSPACE/kernel_workspace
-        # Téléchargement de la toolchain Clang/LLVM officielle d'AOSP
+        # Téléchargement de la toolchain Clang/LLVM officielle d'AOSP (uniquement la branche kernel)
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
 
     - name: Clonage des sources du Noyau LineageOS sm8250
@@ -29,102 +29,53 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
-    - name: Configuration des defconfigs (Dossier Vendor + Fix Sécurité)
+    - name: Configuration et Patch du Defconfig (vendor/kona-perf_defconfig)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Boucle sur les fichiers cibles du dossier vendor/ pour injecter et corriger la config
-        for config in vendor/sm8250_defconfig vendor/kona_defconfig; do
-          if [ -f "arch/arm64/configs/$config" ]; then
-            echo "Optimisation de la configuration dans : $config"
-            
-            # 1. On s'assure que les évènements Kprobes indispensables à KernelSU Next sont là
-            cat << EOF >> arch/arm64/configs/$config
-            CONFIG_MODULES=y
-            CONFIG_HAVE_KPROBES=y
-            CONFIG_KPROBE_EVENTS=y
-            EOF
-            
-            # 2. On désactive la vérification stricte des signatures de modules pour éviter le bootloop
-            sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' arch/arm64/configs/$config
-            sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' arch/arm64/configs/$config
-          fi
-        done
+        TARGET_CONFIG="arch/arm64/configs/vendor/kona-perf_defconfig"
+        
+        if [ -f "$TARGET_CONFIG" ]; then
+          echo "Correction de l'alignement et injection des options KernelSU Next..."
+          
+          # 1. Saut de ligne initial pour éviter les conflits d'alignement + Kprobes requis
+          cat << EOF >> $TARGET_CONFIG
 
-    - name: Compilation du Noyau sous Clang (Android 16 / LLVM=1)
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        
-        CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
-        export PATH="$CLANG_BIN:$PATH"
-        
-        export ARCH=arm64
-        export SUBARCH=arm64
-        
-        # Génération automatique du fichier .config basé sur la cible principale de l'arbre unifié
-        make O=out LLVM=1 LLVM_IAS=1 \
-          CC=$CLANG_BIN/clang \
-          LD=$CLANG_BIN/ld.lld \
-          AR=$CLANG_BIN/llvm-ar \
-          NM=$CLANG_BIN/llvm-nm \
-          OBJCOPY=$CLANG_BIN/llvm-objcopy \
-          OBJDUMP=$CLANG_BIN/llvm-objdump \
-          STRIP=$CLANG_BIN/llvm-strip \
-          sm8250_defconfig
-        
-        # Lancement de la compilation avec l'infrastructure LLVM intégrée requise pour LineageOS 23.2
-        make O=out LLVM=1 LLVM_IAS=1 \
-          CC=$CLANG_BIN/clang \
-          LD=$CLANG_BIN/ld.lld \
-          AR=$CLANG_BIN/llvm-ar \
-          NM=$CLANG_BIN/llvm-nm \
-          OBJCOPY=$CLANG_BIN/llvm-objcopy \
-          OBJDUMP=$CLANG_BIN/llvm-objdump \
-          STRIP=$CLANG_BIN/llvm-strip \
-          -j$(nproc)
-    - name: Compilation du Noyau (Snapdragon 750G)
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        
-        CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
-        export PATH="$CLANG_BIN:$PATH"
-        
-        export ARCH=arm64
-        export SUBARCH=arm64
-        
-        # Remplacer 'bengal_defconfig' par 'kiev_defconfig' si l'arbre possède sa propre cible dédiée
-        make O=out LLVM=1 LLVM_IAS=1 \
-          CC=$CLANG_BIN/clang \
-          LD=$CLANG_BIN/ld.lld \
-          AR=$CLANG_BIN/llvm-ar \
-          NM=$CLANG_BIN/llvm-nm \
-          OBJCOPY=$CLANG_BIN/llvm-objcopy \
-          OBJDUMP=$CLANG_BIN/llvm-objdump \
-          STRIP=$CLANG_BIN/llvm-strip \
-          bengal_defconfig
-        
-        make O=out LLVM=1 LLVM_IAS=1 \
-          CC=$CLANG_BIN/clang \
-          LD=$CLANG_BIN/ld.lld \
-          AR=$CLANG_BIN/llvm-ar \
-          NM=$CLANG_BIN/llvm-nm \
-          OBJCOPY=$CLANG_BIN/llvm-objcopy \
-          OBJDUMP=$CLANG_BIN/llvm-objdump \
-          STRIP=$CLANG_BIN/llvm-strip \
-          -j$(nproc)
+CONFIG_KPROBES=y
+CONFIG_HAVE_KPROBES=y
+CONFIG_KPROBE_EVENTS=y
+CONFIG_MODULES=y
+EOF
+          
+          # 2. Désactivation du CFI Clang pour empêcher les bootloops de sécurité sur Android 16
+          sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $TARGET_CONFIG
+          
+          # 3. Désactivation des signatures de modules obligatoires
+          sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $TARGET_CONFIG
+          sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $TARGET_CONFIG
+          
+          echo "Patch de configuration appliqué avec succès."
+        else
+          echo "Erreur : Le fichier $TARGET_CONFIG est introuvable !"
+          exit 1
+        fi
 
-    - name: Compilation du Noyau
+    - name: Compilation Unique du Noyau avec LLVM Natif
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Variables de dossier absolu
-        CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
-        export PATH="$CLANG_BIN:$PATH"
+        # Ciblage du sous-dossier clang standardisé dans linux-x86
+        CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/clang-r522817/bin"
+        if [ ! -d "$CLANG_BIN" ]; then
+            # Sécurité si le dossier r522817 change de nom dans le dépôt distant
+            CLANG_BIN=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace/clang -name clang -type f | head -n 1))
+        fi
         
+        export PATH="$CLANG_BIN:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Variables d'environnement pour forcer LLVM natif
+        # Définition des variables globales pour le compilateur
         export CC="clang"
         export LD="ld.lld"
         export AR="llvm-ar"
@@ -133,7 +84,9 @@ jobs:
         export OBJDUMP="llvm-objdump"
         export STRIP="llvm-strip"
         
-        # Étape 1 : Génération de la configuration en forçant LLVM ET les chemins absolus pour passer le test Kconfig
+        echo "Utilisation de la Toolchain située dans : $CLANG_BIN"
+        
+        # Étape 1 : Génération du fichier .config à partir de la cible de production Motorola
         make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
@@ -142,9 +95,9 @@ jobs:
           OBJCOPY=$CLANG_BIN/llvm-objcopy \
           OBJDUMP=$CLANG_BIN/llvm-objdump \
           STRIP=$CLANG_BIN/llvm-strip \
-          sm8250_defconfig
+          vendor/kona-perf_defconfig
         
-        # Étape 2 : Compilation avec l'infrastructure LLVM complète et LTO
+        # Étape 2 : Compilation finale avec optimisation ThinLTO
         LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
