@@ -15,18 +15,20 @@ jobs:
     - name: Création de l'espace de travail
       run: mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
-    - name: Téléchargement des Toolchains (Clang & GCC)
+    - name: Téléchargement des Toolchains (Clang & Vrai GCC Prebuilts)
       run: |
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
         cd $GITHUB_WORKSPACE/kernel_workspace
-        # Téléchargement de Clang
+        
+        # 1. Téléchargement de Clang
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
-        # Téléchargement de GCC 64-bit (Requis par Kconfig et l'assemblage pour sm8250)
-        git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 -b master gcc64
+        
+        # 2. Téléchargement du VRAI GCC officiel d'AOSP (contenant aarch64-linux-android-gcc)
+        git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 -b android12-release gcc64
 
     - name: Clonage des sources du Noyau LineageOS sm8250
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        # ETAPE CORRIGÉE : On télécharge les sources avant d'y injecter KernelSU
         git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
 
     - name: Injection de KernelSU Next (Branche Legacy)
@@ -37,14 +39,10 @@ jobs:
     - name: Configuration du defconfig (vendor)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        
-        # Choix du chemin du defconfig
         export DEFCONFIG_PATH="arch/arm64/configs/vendor/sm8250_defconfig"
-        
         if [ ! -f "$DEFCONFIG_PATH" ]; then
             DEFCONFIG_PATH="arch/arm64/configs/sm8250_defconfig"
         fi
-        
         cat << EOF >> $DEFCONFIG_PATH
         CONFIG_MODULES=y
         CONFIG_KPROBES=y
@@ -56,26 +54,22 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # 1. Création d'un dossier temporaire pour nos alias de compilateurs
-        mkdir -p $GITHUB_WORKSPACE/kernel_workspace/bin_compat
+        # On définit le PATH absolu vers les dossiers bin/ de Clang ET de GCC
+        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
         
-        # 2. Création du lien symbolique : on fait pointer 'gcc' vers 'clang'
-        ln -sf $GITHUB_WORKSPACE/kernel_workspace/clang/bin/clang $GITHUB_WORKSPACE/kernel_workspace/bin_compat/aarch64-linux-android-gcc
-        
-        # 3. Ajout du dossier de compatibilité ET de Clang dans le PATH
-        export PATH="$GITHUB_WORKSPACE/kernel_workspace/bin_compat:$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
-        
-        # Variables d'architecture globales
+        # Paramètres d'architecture
         export ARCH=arm64
         export SUBARCH=arm64
+        
+        # Variables de compilation croisée unifiées
         export CC=clang
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-android-
         
-        # Génération de la configuration (le script trouvera enfin son binaire "fake" gcc)
+        # Génération de la configuration (le vrai GCC est maintenant présent pour répondre à Kconfig)
         make O=out vendor/sm8250_defconfig || make O=out sm8250_defconfig
         
-        # Compilation finale
+        # Lancement de la compilation
         LTO=thin make O=out -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
