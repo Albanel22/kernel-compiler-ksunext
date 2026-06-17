@@ -44,30 +44,36 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
+        # Définition des dossiers binaires absolus
+        CLANG_DIR="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
+        GCC_DIR="$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin"
+        export PATH="$CLANG_DIR:$GCC_DIR:$PATH"
+        
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Définition des variables Clang + LLVM complètes requises par le Makefile arm64
-        export CC=clang
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
+        # Variables de cross-compilation
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-android-
         
-        # Génération de la configuration
-        make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- sm8250_defconfig
+        # Génération de la configuration (on utilise le chemin absolu vers Clang pour valider Kconfig)
+        make O=out CC=$CLANG_DIR/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- sm8250_defconfig
         
-        # Compilation (LTO=thin actif pour correspondre aux optimisations sm8250)
-        LTO=thin make O=out CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- -j$(nproc)
+        # Lancement de la compilation avec assignation forcée des outils LLVM
+        LTO=thin make O=out \
+          CC=$CLANG_DIR/clang \
+          LD=$CLANG_DIR/ld.lld \
+          AR=$CLANG_DIR/llvm-ar \
+          NM=$CLANG_DIR/llvm-nm \
+          OBJCOPY=$CLANG_DIR/llvm-objcopy \
+          OBJDUMP=$CLANG_DIR/llvm-objdump \
+          STRIP=$CLANG_DIR/llvm-strip \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE=aarch64-linux-android- \
+          -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
       with:
         name: Kernel_KernelSU_Next_sm8250
-        # CORRECTION : Le chemin accepte désormais n'importe quelle variante générée (Image, Image.gz ou Image.gz-dtb)
         path: ${{ github.workspace }}/kernel_workspace/kernel-src/out/arch/arm64/boot/Image*
