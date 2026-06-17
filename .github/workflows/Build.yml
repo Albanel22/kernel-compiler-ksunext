@@ -29,20 +29,25 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
-    - name: Configuration du defconfig (Kiev / SM8250 Unifié)
+    - name: Configuration des defconfigs (Dossier Vendor + Fix Sécurité)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Le script boucle sur toutes les variantes possibles présentes dans l'arborescence Motorola
-        for config in kiev_defconfig sm8250_defconfig kona_defconfig vendor/kona_defconfig bengal_defconfig; do
+        # Boucle sur les fichiers cibles du dossier vendor/ pour injecter et corriger la config
+        for config in vendor/sm8250_defconfig vendor/kona_defconfig; do
           if [ -f "arch/arm64/configs/$config" ]; then
-            echo "Patching KernelSU Next options inside: $config"
+            echo "Optimisation de la configuration dans : $config"
+            
+            # 1. On s'assure que les évènements Kprobes indispensables à KernelSU Next sont là
             cat << EOF >> arch/arm64/configs/$config
-        CONFIG_MODULES=y
-        CONFIG_KPROBES=y
-        CONFIG_HAVE_KPROBES=y
-        CONFIG_KPROBE_EVENTS=y
-        EOF
+            CONFIG_MODULES=y
+            CONFIG_HAVE_KPROBES=y
+            CONFIG_KPROBE_EVENTS=y
+            EOF
+            
+            # 2. On désactive la vérification stricte des signatures de modules pour éviter le bootloop
+            sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' arch/arm64/configs/$config
+            sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' arch/arm64/configs/$config
           fi
         done
 
