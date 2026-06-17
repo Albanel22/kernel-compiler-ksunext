@@ -26,14 +26,20 @@ jobs:
     - name: Injection de KernelSU Next & Raccordement du Symbole umount
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+        curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy        
         
         TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
         if [ -f "$TARGET_FILE" ]; then
-          echo "Force-mapping de path_umount vers do_umount via un header-hack..."
-          # On insère un bête #define tout en haut du fichier pour écraser l'appel manquant de KSU
-          sed -i '1s/^/#define path_umount(path, flags) do_umount(path.dentry->d_sb, flags)\n/' $TARGET_FILE
-          echo "Patch d'alias appliqué."
+          echo "Patch chirurgical de kernel_umount.c pour rediriger vers do_umount..."
+          
+          # 1. On remplace la fausse déclaration de 'path_umount' par celle de 'do_umount'
+          sed -i 's/extern int path_umount.*/extern int do_umount(struct vfsmount *mnt, int flags);/g' $TARGET_FILE
+          
+          # 2. On modifie l'appel interne pour utiliser l'ancienne signature à 2 arguments (mnt, flags)
+          sed -i 's/path_umount(path, flags)/do_umount(path->mnt, flags)/g' $TARGET_FILE
+          sed -i 's/path_umount(&path, flags)/do_umount(path.mnt, flags)/g' $TARGET_FILE
+          
+          echo "Fichier kernel_umount.c patché avec succès."
         else
           echo "Erreur : Fichier KSU introuvable."
           exit 1
@@ -41,8 +47,7 @@ jobs:
 
     - name: Configuration et Préparation du Defconfig Target
       run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        
+        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
         SRC_CONFIG="arch/arm64/configs/vendor/kona-perf_defconfig"
         FINAL_CONFIG="arch/arm64/configs/kiev_defconfig"
         
@@ -81,8 +86,7 @@ jobs:
 
     - name: Compilation Unique du Noyau avec LLVM Natif
       run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        
+        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
         CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/clang-r522817/bin"
         if [ ! -d "$CLANG_BIN" ]; then
             CLANG_BIN=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace/clang -name clang -type f | head -n 1))
