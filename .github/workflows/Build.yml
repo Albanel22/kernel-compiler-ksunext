@@ -135,22 +135,20 @@ jobs:
       - name: Preparation du Package Flashable AnyKernel3
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace
-          # Clonage du modele AnyKernel3 officiel
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel
           
-          # Copie de ton fichier Image compile au coeur du dossier AnyKernel
           cp kernel-src/out/arch/arm64/boot/Image AnyKernel/Image
           
           cd AnyKernel
-          # Configuration rapide du script pour cibler la partition de boot
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot/block=auto/g' anykernel.sh
           sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
           
-          # Compression au format ZIP
-          zip -r9 ../KernelSU_Next_Flashable.zip * -x .git* README.md
+          # Nettoyage des metadonnees Git inutiles avant envoi
+          rm -rf .git
 
       - name: Televersement du ZIP Flashable (Artifact)
         uses: actions/upload-artifact@v4
         with:
           name: KernelSU_Next_Lineage23_sm8250_Flashable
-          path: ${{ github.workspace }}/kernel_workspace/KernelSU_Next_Flashable.zip
+          path: ${{ github.workspace }}/kernel_workspace/AnyKernel/*
