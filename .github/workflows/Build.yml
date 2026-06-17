@@ -23,6 +23,12 @@ jobs:
         # Téléchargement de GCC 64-bit (Requis par Kconfig et l'assemblage pour sm8250)
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 -b master gcc64
 
+    - name: Clonage des sources du Noyau LineageOS sm8250
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        # ETAPE CORRIGÉE : On télécharge les sources avant d'y injecter KernelSU
+        git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
+
     - name: Injection de KernelSU Next (Branche Legacy)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
@@ -32,12 +38,10 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Le defconfig d'origine pour sm8250 se trouve généralement sous arch/arm64/configs/vendor/sm8250_defconfig
-        # ou un alias lié à l'appareil. Nous injectons les options à la fois dans la racine et vendor.
+        # Choix du chemin du defconfig
         export DEFCONFIG_PATH="arch/arm64/configs/vendor/sm8250_defconfig"
         
         if [ ! -f "$DEFCONFIG_PATH" ]; then
-            # Solution de secours si la hiérarchie diffère
             DEFCONFIG_PATH="arch/arm64/configs/sm8250_defconfig"
         fi
         
@@ -66,7 +70,6 @@ jobs:
         
         # Compilation finale
         LTO=thin make O=out -j$(nproc)
-
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
