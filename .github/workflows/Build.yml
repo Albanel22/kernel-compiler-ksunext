@@ -12,12 +12,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo6
     
-    - name: Création de l'espace de travail et Téléchargement des Toolchains
+    - name: Création de l'espace de travail et Téléchargement de Clang (LLVM)
       run: |
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
         cd $GITHUB_WORKSPACE/kernel_workspace
+        # Téléchargement de la toolchain Clang/LLVM officielle d'AOSP
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
-        git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 -b android12-release gcc64
 
     - name: Clonage des sources du Noyau LineageOS sm8250
       run: |
@@ -44,33 +44,17 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Définition des dossiers binaires absolus
-        CLANG_DIR="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
-        GCC_DIR="$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin"
-        export PATH="$CLANG_DIR:$GCC_DIR:$PATH"
+        # Ajout de Clang au PATH global
+        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$PATH"
         
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Variables de cross-compilation
-        export CLANG_TRIPLE=aarch64-linux-gnu-
-        export CROSS_COMPILE=aarch64-linux-android-
+        # Étape 1 : Génération de la configuration avec LLVM complet
+        make O=out LLVM=1 LLVM_IAS=1 sm8250_defconfig
         
-        # Génération de la configuration (on utilise le chemin absolu vers Clang pour valider Kconfig)
-        make O=out CC=$CLANG_DIR/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- sm8250_defconfig
-        
-        # Lancement de la compilation avec assignation forcée des outils LLVM
-        LTO=thin make O=out \
-          CC=$CLANG_DIR/clang \
-          LD=$CLANG_DIR/ld.lld \
-          AR=$CLANG_DIR/llvm-ar \
-          NM=$CLANG_DIR/llvm-nm \
-          OBJCOPY=$CLANG_DIR/llvm-objcopy \
-          OBJDUMP=$CLANG_DIR/llvm-objdump \
-          STRIP=$CLANG_DIR/llvm-strip \
-          CLANG_TRIPLE=aarch64-linux-gnu- \
-          CROSS_COMPILE=aarch64-linux-android- \
-          -j$(nproc)
+        # Étape 2 : Compilation avec l'infrastructure LLVM native (gère CC, LD, AR, etc.)
+        LTO=thin make O=out LLVM=1 LLVM_IAS=1 -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
