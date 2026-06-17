@@ -29,16 +29,53 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
-    - name: Configuration du defconfig
+    - name: Configuration du defconfig pour Kiev (SM7225)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        export DEFCONFIG_PATH="arch/arm64/configs/sm8250_defconfig"
-        cat << EOF >> $DEFCONFIG_PATH
+        
+        # Injection de sécurité dans les cibles potentielles de l'arbre SM7225 / Bengal unifié
+        for config in kiev_defconfig sm7225_defconfig bengal_defconfig; do
+          if [ -f "arch/arm64/configs/$config" ]; then
+            echo "Injection des options KernelSU dans $config"
+            cat << EOF >> arch/arm64/configs/$config
         CONFIG_MODULES=y
         CONFIG_KPROBES=y
         CONFIG_HAVE_KPROBES=y
         CONFIG_KPROBE_EVENTS=y
         EOF
+          fi
+        done
+
+    - name: Compilation du Noyau (Snapdragon 750G)
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
+        
+        CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
+        export PATH="$CLANG_BIN:$PATH"
+        
+        export ARCH=arm64
+        export SUBARCH=arm64
+        
+        # Remplacer 'bengal_defconfig' par 'kiev_defconfig' si l'arbre possède sa propre cible dédiée
+        make O=out LLVM=1 LLVM_IAS=1 \
+          CC=$CLANG_BIN/clang \
+          LD=$CLANG_BIN/ld.lld \
+          AR=$CLANG_BIN/llvm-ar \
+          NM=$CLANG_BIN/llvm-nm \
+          OBJCOPY=$CLANG_BIN/llvm-objcopy \
+          OBJDUMP=$CLANG_BIN/llvm-objdump \
+          STRIP=$CLANG_BIN/llvm-strip \
+          bengal_defconfig
+        
+        make O=out LLVM=1 LLVM_IAS=1 \
+          CC=$CLANG_BIN/clang \
+          LD=$CLANG_BIN/ld.lld \
+          AR=$CLANG_BIN/llvm-ar \
+          NM=$CLANG_BIN/llvm-nm \
+          OBJCOPY=$CLANG_BIN/llvm-objcopy \
+          OBJDUMP=$CLANG_BIN/llvm-objdump \
+          STRIP=$CLANG_BIN/llvm-strip \
+          -j$(nproc)
 
     - name: Compilation du Noyau
       run: |
