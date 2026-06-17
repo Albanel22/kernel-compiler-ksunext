@@ -15,15 +15,13 @@ jobs:
     - name: Création de l'espace de travail
       run: mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
-    - name: Téléchargement de la Toolchain AOSP Clang
+    - name: Téléchargement des Toolchains (Clang & GCC)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
+        # Téléchargement de Clang
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
-
-    - name: Clonage des sources du Noyau LineageOS sm8250
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace
-        git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
+        # Téléchargement de GCC 64-bit (Requis par Kconfig et l'assemblage pour sm8250)
+        git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 -b master gcc64
 
     - name: Injection de KernelSU Next (Branche Legacy)
       run: |
@@ -53,18 +51,22 @@ jobs:
     - name: Compilation du Noyau
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$PATH"
+        
+        # Ajout de Clang ET de GCC 64 dans le PATH de la machine
+        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
+        
         export ARCH=arm64
         export SUBARCH=arm64
         export CC=clang
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-android-
         
-        # Lancement de la configuration (Ajustez le nom si votre build utilise une variante spécifique)
+        # Génération de la configuration
         make O=out vendor/sm8250_defconfig || make O=out sm8250_defconfig
         
-        # Compilation brute
+        # Compilation finale
         LTO=thin make O=out -j$(nproc)
+
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
