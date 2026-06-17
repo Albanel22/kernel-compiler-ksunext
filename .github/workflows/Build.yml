@@ -10,7 +10,7 @@ jobs:
     - name: Installation des dépendances Linux
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo6
+        sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo6
     
     - name: Création de l'espace de travail et Téléchargement de Clang (LLVM)
       run: |
@@ -44,17 +44,43 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Ajout de Clang au PATH global
-        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$PATH"
+        # Variables de dossier absolu
+        CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/bin"
+        export PATH="$CLANG_BIN:$PATH"
         
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Étape 1 : Génération de la configuration avec LLVM complet
-        make O=out LLVM=1 LLVM_IAS=1 sm8250_defconfig
+        # Variables d'environnement pour forcer LLVM natif
+        export CC="clang"
+        export LD="ld.lld"
+        export AR="llvm-ar"
+        export NM="llvm-nm"
+        export OBJCOPY="llvm-objcopy"
+        export OBJDUMP="llvm-objdump"
+        export STRIP="llvm-strip"
         
-        # Étape 2 : Compilation avec l'infrastructure LLVM native (gère CC, LD, AR, etc.)
-        LTO=thin make O=out LLVM=1 LLVM_IAS=1 -j$(nproc)
+        # Étape 1 : Génération de la configuration en forçant LLVM ET les chemins absolus pour passer le test Kconfig
+        make O=out LLVM=1 LLVM_IAS=1 \
+          CC=$CLANG_BIN/clang \
+          LD=$CLANG_BIN/ld.lld \
+          AR=$CLANG_BIN/llvm-ar \
+          NM=$CLANG_BIN/llvm-nm \
+          OBJCOPY=$CLANG_BIN/llvm-objcopy \
+          OBJDUMP=$CLANG_BIN/llvm-objdump \
+          STRIP=$CLANG_BIN/llvm-strip \
+          sm8250_defconfig
+        
+        # Étape 2 : Compilation avec l'infrastructure LLVM complète et LTO
+        LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
+          CC=$CLANG_BIN/clang \
+          LD=$CLANG_BIN/ld.lld \
+          AR=$CLANG_BIN/llvm-ar \
+          NM=$CLANG_BIN/llvm-nm \
+          OBJCOPY=$CLANG_BIN/llvm-objcopy \
+          OBJDUMP=$CLANG_BIN/llvm-objdump \
+          STRIP=$CLANG_BIN/llvm-strip \
+          -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
