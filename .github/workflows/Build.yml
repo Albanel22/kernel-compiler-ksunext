@@ -132,8 +132,25 @@ jobs:
             STRIP=$CLANG_BIN/llvm-strip \
             -j$(nproc) Image
 
-      - name: Televersement du Noyau Compile (Artifact)
+      - name: Preparation du Package Flashable AnyKernel3
+        run: |
+          cd $GITHUB_WORKSPACE/kernel_workspace
+          # Clonage du modele AnyKernel3 officiel
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel
+          
+          # Copie de ton fichier Image compile au coeur du dossier AnyKernel
+          cp kernel-src/out/arch/arm64/boot/Image AnyKernel/Image
+          
+          cd AnyKernel
+          # Configuration rapide du script pour cibler la partition de boot
+          sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot/block=auto/g' anykernel.sh
+          sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
+          
+          # Compression au format ZIP
+          zip -r9 ../KernelSU_Next_Flashable.zip * -x .git* README.md
+
+      - name: Televersement du ZIP Flashable (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_KernelSU_Next_kiev_Securise
-          path: ${{ github.workspace }}/kernel_workspace/kernel-src/out/arch/arm64/boot/Image*
+          name: KernelSU_Next_Lineage23_sm8250_Flashable
+          path: ${{ github.workspace }}/kernel_workspace/KernelSU_Next_Flashable.zip
