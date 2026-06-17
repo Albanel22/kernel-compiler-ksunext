@@ -23,19 +23,19 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
 
-    - name: Injection de KernelSU Next (Branche Legacy) et Fix Umount En Dur
+    - name: Injection de KernelSU Next & Raccordement du Symbole umount
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
         
-        # FIX RADICAL : On force l'utilisation de do_umount dans le code de KernelSU Next
         TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
         if [ -f "$TARGET_FILE" ]; then
-          echo "Application du patch manuel pour path_umount -> do_umount..."
-          sed -i 's/#ifdef CONFIG_KSU_LEGACY_UMOUNT/#if 1\n#define CONFIG_KSU_LEGACY_UMOUNT 1/g' $TARGET_FILE
-          echo "Patch appliqué avec succès sur $TARGET_FILE."
+          echo "Force-mapping de path_umount vers do_umount via un header-hack..."
+          # On insère un bête #define tout en haut du fichier pour écraser l'appel manquant de KSU
+          sed -i '1s/^/#define path_umount(path, flags) do_umount(path.dentry->d_sb, flags)\n/' $TARGET_FILE
+          echo "Patch d'alias appliqué."
         else
-          echo "Erreur : Impossible de trouver $TARGET_FILE pour appliquer le correctif !"
+          echo "Erreur : Fichier KSU introuvable."
           exit 1
         fi
 
@@ -50,25 +50,22 @@ jobs:
           echo "Copie et patch du fichier de configuration..."
           cp $SRC_CONFIG $FINAL_CONFIG
           
-          # Nettoyage préventif
           sed -i '/CONFIG_KPROBES/d' $FINAL_CONFIG
           sed -i '/CONFIG_HAVE_KPROBES/d' $FINAL_CONFIG
           sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
           sed -i '/CONFIG_MODULES/d' $FINAL_CONFIG
           
-          # Injection propre des options requises
           echo "" >> $FINAL_CONFIG
           echo "CONFIG_MODULES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
           
-          # Désactivation des sécurités conflictuelles
           sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
           sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $FINAL_CONFIG
           sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $FINAL_CONFIG
           
-          echo "Fichier arch/arm64/configs/kiev_defconfig généré avec succès."
+          echo "Fichier arch/arm64/configs/kiev_defconfig généré."
         else
           echo "Erreur : Le fichier source $SRC_CONFIG est introuvable !"
           exit 1
@@ -103,7 +100,6 @@ jobs:
         export OBJDUMP="llvm-objdump"
         export STRIP="llvm-strip"
         
-        # Étape 1 : Génération du .config
         make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
@@ -114,7 +110,6 @@ jobs:
           STRIP=$CLANG_BIN/llvm-strip \
           kiev_defconfig
         
-        # Étape 2 : Build final ciblé sur l'Image
         LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
