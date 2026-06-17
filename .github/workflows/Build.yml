@@ -23,10 +23,21 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
 
-    - name: Injection de KernelSU Next (Branche Legacy)
+    - name: Injection de KernelSU Next (Branche Legacy) et Fix Umount En Dur
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+        
+        # FIX RADICAL : On force l'utilisation de do_umount dans le code de KernelSU Next
+        TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
+        if [ -f "$TARGET_FILE" ]; then
+          echo "Application du patch manuel pour path_umount -> do_umount..."
+          sed -i 's/#ifdef CONFIG_KSU_LEGACY_UMOUNT/#if 1\n#define CONFIG_KSU_LEGACY_UMOUNT 1/g' $TARGET_FILE
+          echo "Patch appliqué avec succès sur $TARGET_FILE."
+        else
+          echo "Erreur : Impossible de trouver $TARGET_FILE pour appliquer le correctif !"
+          exit 1
+        fi
 
     - name: Configuration et Préparation du Defconfig Target
       run: |
@@ -51,9 +62,6 @@ jobs:
           echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
-          
-          # Option magique pour régler le bug path_umount sur l'arbre sm8250 legacy
-          echo "CONFIG_KSU_LEGACY_UMOUNT=y" >> $FINAL_CONFIG
           
           # Désactivation des sécurités conflictuelles
           sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
