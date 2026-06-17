@@ -66,11 +66,9 @@ jobs:
     - name: Correction des alertes strictes Clang (Caméra Fix)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-        # On désactive l'arrêt du build sur les erreurs d'optimisation de chaînes (fortify) du vieux code Motorola
         if [ -f "techpack/camera/drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/Makefile" ]; then
           echo "subdir-ccflags-y += -Wno-error" >> techpack/camera/drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/Makefile
         fi
-        # Désactivation globale de CC_WERROR dans le Makefile principal par sécurité
         sed -i 's/CONFIG_CC_WERROR=y/# CONFIG_CC_WERROR is not set/g' arch/arm64/configs/kiev_defconfig
 
     - name: Compilation Unique du Noyau avec LLVM Natif
@@ -105,7 +103,7 @@ jobs:
           STRIP=$CLANG_BIN/llvm-strip \
           kiev_defconfig
         
-        # Étape 2 : Build final avec ThinLTO
+        # Étape 2 : Build ciblé UNIQUEMENT sur l'image noyau pour éviter le segfault de kona.dtb
         LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
@@ -114,7 +112,7 @@ jobs:
           OBJCOPY=$CLANG_BIN/llvm-objcopy \
           OBJDUMP=$CLANG_BIN/llvm-objdump \
           STRIP=$CLANG_BIN/llvm-strip \
-          -j$(nproc)
+          -j$(nproc) Image
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
