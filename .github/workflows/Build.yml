@@ -16,7 +16,6 @@ jobs:
       run: |
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
         cd $GITHUB_WORKSPACE/kernel_workspace
-        # Téléchargement de la toolchain Clang/LLVM officielle d'AOSP (uniquement la branche kernel)
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
 
     - name: Clonage des sources du Noyau LineageOS sm8250
@@ -38,19 +37,15 @@ jobs:
         if [ -f "$TARGET_CONFIG" ]; then
           echo "Correction de l'alignement et injection des options KernelSU Next..."
           
-          # 1. Saut de ligne initial pour éviter les conflits d'alignement + Kprobes requis
-          cat << EOF >> $TARGET_CONFIG
-
-CONFIG_KPROBES=y
-CONFIG_HAVE_KPROBES=y
-CONFIG_KPROBE_EVENTS=y
-CONFIG_MODULES=y
-EOF
+          # Utilisation de echo individuels bien indentés pour ne pas casser le YAML
+          echo "" >> $TARGET_CONFIG
+          echo "CONFIG_KPROBES=y" >> $TARGET_CONFIG
+          echo "CONFIG_HAVE_KPROBES=y" >> $TARGET_CONFIG
+          echo "CONFIG_KPROBE_EVENTS=y" >> $TARGET_CONFIG
+          echo "CONFIG_MODULES=y" >> $TARGET_CONFIG
           
-          # 2. Désactivation du CFI Clang pour empêcher les bootloops de sécurité sur Android 16
+          # Désactivation des sécurités conflictuelles
           sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $TARGET_CONFIG
-          
-          # 3. Désactivation des signatures de modules obligatoires
           sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $TARGET_CONFIG
           sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $TARGET_CONFIG
           
@@ -64,10 +59,8 @@ EOF
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Ciblage du sous-dossier clang standardisé dans linux-x86
         CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/clang-r522817/bin"
         if [ ! -d "$CLANG_BIN" ]; then
-            # Sécurité si le dossier r522817 change de nom dans le dépôt distant
             CLANG_BIN=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace/clang -name clang -type f | head -n 1))
         fi
         
@@ -75,7 +68,6 @@ EOF
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Définition des variables globales pour le compilateur
         export CC="clang"
         export LD="ld.lld"
         export AR="llvm-ar"
@@ -84,9 +76,7 @@ EOF
         export OBJDUMP="llvm-objdump"
         export STRIP="llvm-strip"
         
-        echo "Utilisation de la Toolchain située dans : $CLANG_BIN"
-        
-        # Étape 1 : Génération du fichier .config à partir de la cible de production Motorola
+        # Étape 1 : Génération du .config
         make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
@@ -97,7 +87,7 @@ EOF
           STRIP=$CLANG_BIN/llvm-strip \
           vendor/kona-perf_defconfig
         
-        # Étape 2 : Compilation finale avec optimisation ThinLTO
+        # Étape 2 : Build final
         LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
