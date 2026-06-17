@@ -28,30 +28,38 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
-    - name: Configuration et Patch du Defconfig (vendor/kona-perf_defconfig)
+    - name: Configuration et Préparation du Defconfig Target
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        TARGET_CONFIG="arch/arm64/configs/vendor/kona-perf_defconfig"
+        SRC_CONFIG="arch/arm64/configs/vendor/kona-perf_defconfig"
+        FINAL_CONFIG="arch/arm64/configs/kiev_defconfig"
         
-        if [ -f "$TARGET_CONFIG" ]; then
-          echo "Correction de l'alignement et injection des options KernelSU Next..."
+        if [ -f "$SRC_CONFIG" ]; then
+          echo "Copie et patch du fichier de configuration..."
+          cp $SRC_CONFIG $FINAL_CONFIG
           
-          # Utilisation de echo individuels bien indentés pour ne pas casser le YAML
-          echo "" >> $TARGET_CONFIG
-          echo "CONFIG_KPROBES=y" >> $TARGET_CONFIG
-          echo "CONFIG_HAVE_KPROBES=y" >> $TARGET_CONFIG
-          echo "CONFIG_KPROBE_EVENTS=y" >> $TARGET_CONFIG
-          echo "CONFIG_MODULES=y" >> $TARGET_CONFIG
+          # Nettoyage préventif des anciennes occurrences pour éviter l'erreur "redefinition of CONFIG_KPROBES"
+          sed -i '/CONFIG_KPROBES/d' $FINAL_CONFIG
+          sed -i '/CONFIG_HAVE_KPROBES/d' $FINAL_CONFIG
+          sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
+          sed -i '/CONFIG_MODULES/d' $FINAL_CONFIG
           
-          # Désactivation des sécurités conflictuelles
-          sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $TARGET_CONFIG
-          sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $TARGET_CONFIG
-          sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $TARGET_CONFIG
+          # Injection propre des options requises en fin de fichier
+          echo "" >> $FINAL_CONFIG
+          echo "CONFIG_MODULES=y" >> $FINAL_CONFIG
+          echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
+          echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
+          echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
           
-          echo "Patch de configuration appliqué avec succès."
+          # Désactivation des sécurités conflictuelles (CFI / Signatures)
+          sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
+          sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $FINAL_CONFIG
+          sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $FINAL_CONFIG
+          
+          echo "Fichier arch/arm64/configs/kiev_defconfig généré avec succès."
         else
-          echo "Erreur : Le fichier $TARGET_CONFIG est introuvable !"
+          echo "Erreur : Le fichier source $SRC_CONFIG est introuvable !"
           exit 1
         fi
 
@@ -76,7 +84,7 @@ jobs:
         export OBJDUMP="llvm-objdump"
         export STRIP="llvm-strip"
         
-        # Étape 1 : Génération du .config
+        # Étape 1 : Génération du .config à partir de notre fichier kiev_defconfig localisé à la racine
         make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
@@ -85,9 +93,9 @@ jobs:
           OBJCOPY=$CLANG_BIN/llvm-objcopy \
           OBJDUMP=$CLANG_BIN/llvm-objdump \
           STRIP=$CLANG_BIN/llvm-strip \
-          vendor/kona-perf_defconfig
+          kiev_defconfig
         
-        # Étape 2 : Build final
+        # Étape 2 : Build final avec ThinLTO
         LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
@@ -101,5 +109,5 @@ jobs:
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel_KernelSU_Next_sm8250
+        name: Kernel_KernelSU_Next_kiev
         path: ${{ github.workspace }}/kernel_workspace/kernel-src/out/arch/arm64/boot/Image*
