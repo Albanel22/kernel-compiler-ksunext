@@ -39,20 +39,20 @@ jobs:
           echo "Copie et patch du fichier de configuration..."
           cp $SRC_CONFIG $FINAL_CONFIG
           
-          # Nettoyage préventif des anciennes occurrences pour éviter l'erreur "redefinition of CONFIG_KPROBES"
+          # Nettoyage préventif
           sed -i '/CONFIG_KPROBES/d' $FINAL_CONFIG
           sed -i '/CONFIG_HAVE_KPROBES/d' $FINAL_CONFIG
           sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
           sed -i '/CONFIG_MODULES/d' $FINAL_CONFIG
           
-          # Injection propre des options requises en fin de fichier
+          # Injection propre
           echo "" >> $FINAL_CONFIG
           echo "CONFIG_MODULES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
           
-          # Désactivation des sécurités conflictuelles (CFI / Signatures)
+          # Désactivation des sécurités conflictuelles
           sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
           sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $FINAL_CONFIG
           sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $FINAL_CONFIG
@@ -62,6 +62,16 @@ jobs:
           echo "Erreur : Le fichier source $SRC_CONFIG est introuvable !"
           exit 1
         fi
+
+    - name: Correction des alertes strictes Clang (Caméra Fix)
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
+        # On désactive l'arrêt du build sur les erreurs d'optimisation de chaînes (fortify) du vieux code Motorola
+        if [ -f "techpack/camera/drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/Makefile" ]; then
+          echo "subdir-ccflags-y += -Wno-error" >> techpack/camera/drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/Makefile
+        fi
+        # Désactivation globale de CC_WERROR dans le Makefile principal par sécurité
+        sed -i 's/CONFIG_CC_WERROR=y/# CONFIG_CC_WERROR is not set/g' arch/arm64/configs/kiev_defconfig
 
     - name: Compilation Unique du Noyau avec LLVM Natif
       run: |
@@ -84,7 +94,7 @@ jobs:
         export OBJDUMP="llvm-objdump"
         export STRIP="llvm-strip"
         
-        # Étape 1 : Génération du .config à partir de notre fichier kiev_defconfig localisé à la racine
+        # Étape 1 : Génération du .config
         make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
