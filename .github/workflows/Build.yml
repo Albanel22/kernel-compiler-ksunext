@@ -45,12 +45,15 @@ jobs:
           sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
           sed -i '/CONFIG_MODULES/d' $FINAL_CONFIG
           
-          # Injection propre
+          # Injection propre des options requises
           echo "" >> $FINAL_CONFIG
           echo "CONFIG_MODULES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
+          
+          # Option magique pour régler le bug path_umount sur l'arbre sm8250 legacy
+          echo "CONFIG_KSU_LEGACY_UMOUNT=y" >> $FINAL_CONFIG
           
           # Désactivation des sécurités conflictuelles
           sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
@@ -103,7 +106,7 @@ jobs:
           STRIP=$CLANG_BIN/llvm-strip \
           kiev_defconfig
         
-        # Étape 2 : Build ciblé UNIQUEMENT sur l'image noyau pour éviter le segfault de kona.dtb
+        # Étape 2 : Build final ciblé sur l'Image
         LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
           CC=$CLANG_BIN/clang \
           LD=$CLANG_BIN/ld.lld \
