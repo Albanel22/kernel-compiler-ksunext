@@ -56,20 +56,23 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Ajout de Clang ET de GCC 64 dans le PATH de la machine
+        # Déclaration absolue des chemins vers Clang et GCC
         export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
         
+        # Variables d'architecture requises
         export ARCH=arm64
         export SUBARCH=arm64
+        
+        # Forcer l'utilisation de Clang et LLVM
         export CC=clang
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-android-
         
-        # Génération de la configuration
-        make O=out vendor/sm8250_defconfig || make O=out sm8250_defconfig
+        # CORRECTION : On passe explicitement le compilateur et le préfixe à la commande de configuration
+        make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- vendor/sm8250_defconfig || make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- sm8250_defconfig
         
-        # Compilation finale
-        LTO=thin make O=out -j$(nproc)
+        # Lancement de la compilation finale
+        LTO=thin make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
