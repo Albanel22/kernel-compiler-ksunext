@@ -56,23 +56,27 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # Déclaration absolue des chemins vers Clang et GCC
-        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
+        # 1. Création d'un dossier temporaire pour nos alias de compilateurs
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace/bin_compat
         
-        # Variables d'architecture requises
+        # 2. Création du lien symbolique : on fait pointer 'gcc' vers 'clang'
+        ln -sf $GITHUB_WORKSPACE/kernel_workspace/clang/bin/clang $GITHUB_WORKSPACE/kernel_workspace/bin_compat/aarch64-linux-android-gcc
+        
+        # 3. Ajout du dossier de compatibilité ET de Clang dans le PATH
+        export PATH="$GITHUB_WORKSPACE/kernel_workspace/bin_compat:$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
+        
+        # Variables d'architecture globales
         export ARCH=arm64
         export SUBARCH=arm64
-        
-        # Forcer l'utilisation de Clang et LLVM
         export CC=clang
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-android-
         
-        # CORRECTION : On passe explicitement le compilateur et le préfixe à la commande de configuration
-        make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- vendor/sm8250_defconfig || make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- sm8250_defconfig
+        # Génération de la configuration (le script trouvera enfin son binaire "fake" gcc)
+        make O=out vendor/sm8250_defconfig || make O=out sm8250_defconfig
         
-        # Lancement de la compilation finale
-        LTO=thin make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- -j$(nproc)
+        # Compilation finale
+        LTO=thin make O=out -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
