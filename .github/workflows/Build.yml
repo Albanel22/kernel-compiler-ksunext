@@ -13,17 +13,17 @@ jobs:
         sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev libtinfo6
     
     - name: Création de l'espace de travail
-      run: mkdir -p $GITHUB_WORKSPACE/kernel_workspace
-
+      run: mkdir -p $GITHUB_WORKSPACE/kernel_workspace- name: Téléchargement des Toolchains (Clang & Vrai GCC Prebuilts)
+      
     - name: Téléchargement des Toolchains (Clang & Vrai GCC Prebuilts)
       run: |
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
         cd $GITHUB_WORKSPACE/kernel_workspace
         
-        # 1. Téléchargement de Clang
+        # 1. Téléchargement de Clang stable
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
         
-        # 2. Téléchargement du VRAI GCC officiel d'AOSP (contenant aarch64-linux-android-gcc)
+        # 2. Téléchargement de l'ancienne Toolchain GCC contenant physiquement le binaire aarch64-linux-android-gcc
         git clone --depth=1 https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 -b android12-release gcc64
 
     - name: Clonage des sources du Noyau LineageOS sm8250
@@ -54,23 +54,18 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
         
-        # On définit le PATH absolu vers les dossiers bin/ de Clang ET de GCC
+        # Déclaration absolue des répertoires de binaires dans le PATH
         export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang/bin:$GITHUB_WORKSPACE/kernel_workspace/gcc64/bin:$PATH"
         
-        # Paramètres d'architecture
         export ARCH=arm64
         export SUBARCH=arm64
         
-        # Variables de compilation croisée unifiées
-        export CC=clang
-        export CLANG_TRIPLE=aarch64-linux-gnu-
-        export CROSS_COMPILE=aarch64-linux-android-
+        # CORRECTION CRUCIALE : On passe en paramètres en ligne de commande TOUTES les variables 
+        # pour étouffer les vérifications internes du fichier Kconfig.include
+        make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- vendor/sm8250_defconfig || make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- sm8250_defconfig
         
-        # Génération de la configuration (le vrai GCC est maintenant présent pour répondre à Kconfig)
-        make O=out vendor/sm8250_defconfig || make O=out sm8250_defconfig
-        
-        # Lancement de la compilation
-        LTO=thin make O=out -j$(nproc)
+        # Lancement de la compilation avec les mêmes arguments forcés
+        LTO=thin make O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- -j$(nproc)
 
     - name: Téléversement du Noyau Compilé (Artifact)
       uses: actions/upload-artifact@v4
