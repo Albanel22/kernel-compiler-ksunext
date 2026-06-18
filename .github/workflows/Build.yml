@@ -1,4 +1,4 @@
-name: Compilateur KernelSU Next Lineage 23.2 (sm8250) - Securise
+name: Compilateur KernelSU Next Moto One 5G Ace (kiev) - Securise
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
           cd $GITHUB_WORKSPACE/kernel_workspace
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main-kernel-build-2024 clang
 
-      - name: Clonage des sources du Noyau LineageOS sm8250
+      - name: Clonage des sources du Noyau LineageOS (Dépôt partagé sm8250)
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace
           git clone --depth=1 https://github.com/LineageOS/android_kernel_motorola_sm8250.git -b lineage-23.2 kernel-src
@@ -30,132 +30,75 @@ jobs:
           
           TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
           if [ -f "$TARGET_FILE" ]; then
-            echo "Generation propre et verifiee de kernel_umount.c..."
-            
             echo '#include <linux/fs.h>' > $TARGET_FILE
             echo '#include <linux/path.h>' >> $TARGET_FILE
             echo '#include <linux/dcache.h>' >> $TARGET_FILE
             echo '#include <linux/namei.h>' >> $TARGET_FILE
             echo 'extern void __detach_mounts(struct dentry *dentry);' >> $TARGET_FILE
             echo 'int ksu_handle_umount(struct path *path, int flags) {' >> $TARGET_FILE
-            echo '    if (!path || !path->dentry) return 0;' >> $TARGET_FILE
+            echo '    if (!path || !path->dentry) return 0;' >> $views_FILE
             echo '    __detach_mounts(path->dentry);' >> $TARGET_FILE
             echo '    return 0;' >> $TARGET_FILE
             echo '}' >> $TARGET_FILE
-            echo 'int ksu_kernel_umount_init(void) {' >> $TARGET_FILE
-            echo '    return 0;' >> $TARGET_FILE
-            echo '}' >> $TARGET_FILE
+            echo 'int ksu_kernel_umount_init(void) { return 0; }' >> $TARGET_FILE
             echo 'void ksu_kernel_umount_exit(void) {}' >> $TARGET_FILE
-            
-            echo "Fichier kernel_umount.c aligne et securise pour le linker."
           else
-            echo "Erreur : Fichier KSU introuvable."
             exit 1
           fi
 
-      - name: Configuration et Preparation du Defconfig Target
+      - name: Configuration pour l'architecture Snapdragon 750G (Lito/Laguna)
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
-          SRC_CONFIG="arch/arm64/configs/vendor/kona-perf_defconfig"
+          # Utilisation du defconfig specifique lito (750G) au lieu de kona (865)
+          SRC_CONFIG="arch/arm64/configs/vendor/lito-perf_defconfig"
+          if [ ! -f "$SRC_CONFIG" ]; then
+            SRC_CONFIG="arch/arm64/configs/vendor/lito_defconfig"
+          fi
           FINAL_CONFIG="arch/arm64/configs/kiev_defconfig"
           
-          if [ -f "$SRC_CONFIG" ]; then
-            echo "Copie et patch du fichier de configuration..."
-            cp $SRC_CONFIG $FINAL_CONFIG
-            
-            sed -i '/CONFIG_KPROBES/d' $FINAL_CONFIG
-            sed -i '/CONFIG_HAVE_KPROBES/d' $FINAL_CONFIG
-            sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
-            sed -i '/CONFIG_MODULES/d' $FINAL_CONFIG
-            
-            echo "" >> $FINAL_CONFIG
-            echo "CONFIG_MODULES=y" >> $FINAL_CONFIG
-            echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
-            echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
-            echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
-            
-            sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
-            sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $FINAL_CONFIG
-            sed -i 's/CONFIG_MODULE_SIG_FORCE=y/# CONFIG_MODULE_SIG_FORCE is not set/g' $FINAL_CONFIG
-            
-            echo "Fichier arch/arm64/configs/kiev_defconfig genere."
-          else
-            echo "Erreur : Le fichier source $SRC_CONFIG est introuvable !"
-            exit 1
-          fi
+          cp $SRC_CONFIG $FINAL_CONFIG
+          
+          sed -i '/CONFIG_KPROBES/d' $FINAL_CONFIG
+          sed -i '/CONFIG_HAVE_KPROBES/d' $FINAL_CONFIG
+          sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
+          sed -i '/CONFIG_MODULES/d' $FINAL_CONFIG
+          
+          echo "CONFIG_MODULES=y" >> $FINAL_CONFIG
+          echo "CONFIG_KPROBES=y" >> $FINAL_CONFIG
+          echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
+          echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
+          
+          sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
+          sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $FINAL_CONFIG
+          sed -i 's/CONFIG_CC_WERROR=y/# CONFIG_CC_WERROR is not set/g' $FINAL_CONFIG
 
-      - name: Correction des alertes strictes Clang (Camera Fix)
-        run: |
-          cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
-          if [ -f "techpack/camera/drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/Makefile" ]; then
-            echo "subdir-ccflags-y += -Wno-error" >> techpack/camera/drivers/cam_cust/cam_custom_hw_mgr/cam_custom_hw1/Makefile
-          fi
-          sed -i 's/CONFIG_CC_WERROR=y/# CONFIG_CC_WERROR is not set/g' arch/arm64/configs/kiev_defconfig
-
-      - name: Compilation Unique du Noyau avec LLVM Natif
+      - name: Compilation du Noyau pour Moto Kiev
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
-          CLANG_BIN="$GITHUB_WORKSPACE/kernel_workspace/clang/clang-r522817/bin"
-          if [ ! -d "$CLANG_BIN" ]; then
-              CLANG_BIN=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace/clang -name clang -type f | head -n 1))
-          fi
-          
+          CLANG_BIN=$(dirname $(find $GITHUB_WORKSPACE/kernel_workspace/clang -name clang -type f | head -n 1))
           export PATH="$CLANG_BIN:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
           
-          export CC="clang"
-          export LD="ld.lld"
-          export AR="llvm-ar"
-          export NM="llvm-nm"
-          export OBJCOPY="llvm-objcopy"
-          export OBJDUMP="llvm-objdump"
-          export STRIP="llvm-strip"
-          
-          make O=out LLVM=1 LLVM_IAS=1 \
-            CC=$CLANG_BIN/clang \
-            LD=$CLANG_BIN/ld.lld \
-            AR=$CLANG_BIN/llvm-ar \
-            NM=$CLANG_BIN/llvm-nm \
-            OBJCOPY=$CLANG_BIN/llvm-objcopy \
-            OBJDUMP=$CLANG_BIN/llvm-objdump \
-            STRIP=$CLANG_BIN/llvm-strip \
-            kiev_defconfig
-          
-          LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
-            CC=$CLANG_BIN/clang \
-            LD=$CLANG_BIN/ld.lld \
-            AR=$CLANG_BIN/llvm-ar \
-            NM=$CLANG_BIN/llvm-nm \
-            OBJCOPY=$CLANG_BIN/llvm-objcopy \
-            OBJDUMP=$CLANG_BIN/llvm-objdump \
-            STRIP=$CLANG_BIN/llvm-strip \
-            -j$(nproc) Image.gz
+          make O=out LLVM=1 LLVM_IAS=1 kiev_defconfig
+          LTO=thin make O=out LLVM=1 LLVM_IAS=1 -j$(nproc) Image.gz
 
       - name: Preparation du Package Flashable AnyKernel3
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel
           
-          # Verification intelligente de l'emplacement de Image.gz
           FOUND_GZ=$(find kernel-src/out/arch/arm64/boot/ -name "Image.gz*" -type f | head -n 1)
-          if [ -n "$FOUND_GZ" ]; then
-            echo "Noyau compresse trouve ici : $FOUND_GZ"
-            cp "$FOUND_GZ" AnyKernel/Image.gz
-          else
-            echo "Erreur critique : Impossible de trouver le fichier Image.gz genere !"
-            exit 1
-          fi
+          cp "$FOUND_GZ" AnyKernel/Image.gz
           
           cd AnyKernel
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot/block=auto/g' anykernel.sh
           sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
-          
           rm -rf .git
 
       - name: Televersement du ZIP Flashable (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU_Next_Lineage23_sm8250_Flashable
+          name: KernelSU_Next_Moto_Kiev_Flashable
           path: ${{ github.workspace }}/kernel_workspace/AnyKernel/*
