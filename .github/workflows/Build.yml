@@ -31,7 +31,6 @@ jobs:
           TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
           if [ -f "$TARGET_FILE" ]; then
             echo "Generation propre et verifiee de kernel_umount.c..."
-            
             echo '#include <linux/fs.h>' > $TARGET_FILE
             echo '#include <linux/path.h>' >> $TARGET_FILE
             echo '#include <linux/dcache.h>' >> $TARGET_FILE
@@ -44,18 +43,15 @@ jobs:
             echo '}' >> $TARGET_FILE
             echo 'int ksu_kernel_umount_init(void) { return 0; }' >> $TARGET_FILE
             echo 'void ksu_kernel_umount_exit(void) {}' >> $TARGET_FILE
-            
             echo "Fichier kernel_umount.c aligne et securise pour le linker."
           else
             echo "Erreur : Fichier KSU introuvable."
             exit 1
           fi
 
-
       - name: Configuration pour l'architecture Snapdragon 750G (Lito/Laguna)
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
-          # Utilisation du defconfig specifique lito (750G) au lieu de kona (865)
           SRC_CONFIG="arch/arm64/configs/vendor/lito-perf_defconfig"
           if [ ! -f "$SRC_CONFIG" ]; then
             SRC_CONFIG="arch/arm64/configs/vendor/lito_defconfig"
@@ -99,7 +95,7 @@ jobs:
           
           cd AnyKernel
           
-          # On réécrit entièrement un anykernel.sh minimaliste et robuste
+          # On ecrase entierement anykernel.sh pour forcer le chemin reel de la partition
           cat << 'EOF' > anykernel.sh
           # AnyKernel3 Deployment Script
           properties() {
@@ -111,7 +107,6 @@ jobs:
           do.cleanuponabort=1
           }
           
-          # Configuration stricte de la partition de bloc pour Motorola A/B (kiev)
           block=/dev/block/by-name/boot;
           is_slot_device=auto;
           ramdisk_compression=auto;
@@ -125,7 +120,7 @@ jobs:
           EOF
           
           chmod +x anykernel.sh
-          rm -rf .git  
+          rm -rf .git
 
       - name: Televersement du ZIP Flashable (Artifact)
         uses: actions/upload-artifact@v4
