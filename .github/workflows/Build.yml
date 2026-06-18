@@ -30,7 +30,6 @@ jobs:
           
           TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
           if [ -f "$TARGET_FILE" ]; then
-            echo "Generation propre et verifiee de kernel_umount.c..."
             echo '#include <linux/fs.h>' > $TARGET_FILE
             echo '#include <linux/path.h>' >> $TARGET_FILE
             echo '#include <linux/dcache.h>' >> $TARGET_FILE
@@ -43,23 +42,31 @@ jobs:
             echo '}' >> $TARGET_FILE
             echo 'int ksu_kernel_umount_init(void) { return 0; }' >> $TARGET_FILE
             echo 'void ksu_kernel_umount_exit(void) {}' >> $TARGET_FILE
-            echo "Fichier kernel_umount.c aligne et securise pour le linker."
           else
-            echo "Erreur : Fichier KSU introuvable."
             exit 1
           fi
 
-      - name: Configuration pour l'architecture Snapdragon 750G (Lito/Laguna)
+      - name: Configuration par fusion avancee (Spécifique Kiev/Lito)
         run: |
-          cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
-          SRC_CONFIG="arch/arm64/configs/vendor/lito-perf_defconfig"
-          if [ ! -f "$SRC_CONFIG" ]; then
-            SRC_CONFIG="arch/arm64/configs/vendor/lito_defconfig"
-          fi
+          cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src
+          
+          # Base Qualcomm Lito (Snapdragon 750G)
+          BASE_CONFIG="arch/arm64/configs/vendor/lito-perf_defconfig"
+          if [ ! -f "$BASE_CONFIG" ]; then BASE_CONFIG="arch/arm64/configs/vendor/lito_defconfig"; fi
+          
           FINAL_CONFIG="arch/arm64/configs/kiev_defconfig"
+          cp $BASE_CONFIG $FINAL_CONFIG
           
-          cp $SRC_CONFIG $FINAL_CONFIG
+          # Concatenation automatique de toutes les extensions de configuration Lito/Moto disponibles
+          echo "Fusion des configurations materielles Motorola..."
+          for cfg in arch/arm64/configs/vendor/lito.config arch/arm64/configs/vendor/moto-lito.config arch/arm64/configs/vendor/kiev.config; do
+            if [ -f "$cfg" ]; then
+              echo "Integration de : $cfg"
+              cat "$cfg" >> $FINAL_CONFIG
+            fi
+          done
           
+          # Nettoyage et forcage des options materielles et de KernelSU Next
           sed -i '/CONFIG_KPROBES/d' $FINAL_CONFIG
           sed -i '/CONFIG_HAVE_KPROBES/d' $FINAL_CONFIG
           sed -i '/CONFIG_KPROBE_EVENTS/d' $FINAL_CONFIG
@@ -70,6 +77,10 @@ jobs:
           echo "CONFIG_HAVE_KPROBES=y" >> $FINAL_CONFIG
           echo "CONFIG_KPROBE_EVENTS=y" >> $FINAL_CONFIG
           
+          # Forçage des parametres d'architecture extraits de ton boot.img original
+          sed -i 's/CONFIG_ARM64_4K_PAGES=y/CONFIG_ARM64_4K_PAGES=y/g' $FINAL_CONFIG
+          
+          # Desactivation des securites bloquees par le compilateur
           sed -i 's/CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/g' $FINAL_CONFIG
           sed -i 's/CONFIG_MODULE_SIG=y/# CONFIG_MODULE_SIG is not set/g' $FINAL_CONFIG
           sed -i 's/CONFIG_CC_WERROR=y/# CONFIG_CC_WERROR is not set/g' $FINAL_CONFIG
@@ -94,12 +105,10 @@ jobs:
           cp "$FOUND_GZ" AnyKernel/Image.gz
           
           cd AnyKernel
-          
-          # On ecrase entierement anykernel.sh pour forcer le chemin reel de la partition
           cat << 'EOF' > anykernel.sh
           # AnyKernel3 Deployment Script
           properties() {
-          kernel.string=KernelSU-Next-Kiev
+          kernel.string=KernelSU-Next-Kiev-Final
           do.devicecheck=0
           do.modules=0
           do.systemless=1
