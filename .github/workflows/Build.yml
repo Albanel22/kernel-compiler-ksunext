@@ -92,6 +92,8 @@ jobs:
           fi
           sed -i 's/CONFIG_CC_WERROR=y/# CONFIG_CC_WERROR is not set/g' arch/arm64/configs/kiev_defconfig
 
+            # ... (toutes tes étapes précédentes restent identiques) ...
+
       - name: Compilation Unique du Noyau avec LLVM Natif
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace/kernel-src        
@@ -122,6 +124,7 @@ jobs:
             STRIP=$CLANG_BIN/llvm-strip \
             kiev_defconfig
           
+          # ON DEMANDE EXPLICITEMENT LA COMPILATION DE IMAGE.GZ
           LTO=thin make O=out LLVM=1 LLVM_IAS=1 \
             CC=$CLANG_BIN/clang \
             LD=$CLANG_BIN/ld.lld \
@@ -130,21 +133,21 @@ jobs:
             OBJCOPY=$CLANG_BIN/llvm-objcopy \
             OBJDUMP=$CLANG_BIN/llvm-objdump \
             STRIP=$CLANG_BIN/llvm-strip \
-            -j$(nproc) Image
+            -j$(nproc) Image.gz
 
       - name: Preparation du Package Flashable AnyKernel3
         run: |
           cd $GITHUB_WORKSPACE/kernel_workspace
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel
           
-          cp kernel-src/out/arch/arm64/boot/Image AnyKernel/Image
+          # ON COPIE LE FICHIER COMPRESSÉ IMAGE.GZ AU LIEU DE IMAGE
+          cp kernel-src/out/arch/arm64/boot/Image.gz AnyKernel/Image.gz
           
           cd AnyKernel
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot/block=auto/g' anykernel.sh
           sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
           
-          # Nettoyage des metadonnees Git inutiles avant envoi
           rm -rf .git
 
       - name: Televersement du ZIP Flashable (Artifact)
@@ -152,3 +155,4 @@ jobs:
         with:
           name: KernelSU_Next_Lineage23_sm8250_Flashable
           path: ${{ github.workspace }}/kernel_workspace/AnyKernel/*
+
