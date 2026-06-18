@@ -98,12 +98,34 @@ jobs:
           cp "$FOUND_GZ" AnyKernel/Image.gz
           
           cd AnyKernel
-          # On force le chemin moderne et universel pour les partitions Android virtuelles
-          sed -i 's|block=/dev/block/bootdevice/by-name/boot|block=/dev/block/by-name/boot|g' anykernel.sh
-          sed -i 's/is_slot_device=0/is_slot_device=auto/g' anykernel.sh
-          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
           
-          rm -rf .git
+          # On réécrit entièrement un anykernel.sh minimaliste et robuste
+          cat << 'EOF' > anykernel.sh
+          # AnyKernel3 Deployment Script
+          properties() {
+          kernel.string=KernelSU-Next-Kiev
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=1
+          }
+          
+          # Configuration stricte de la partition de bloc pour Motorola A/B (kiev)
+          block=/dev/block/by-name/boot;
+          is_slot_device=auto;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+          
+          . tools/ak3-core.sh;
+          
+          split_boot;
+          flash_boot;
+          flash_dtbo;
+          EOF
+          
+          chmod +x anykernel.sh
+          rm -rf .git  
 
       - name: Televersement du ZIP Flashable (Artifact)
         uses: actions/upload-artifact@v4
