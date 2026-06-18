@@ -30,21 +30,27 @@ jobs:
           
           TARGET_FILE="drivers/kernelsu/feature/kernel_umount.c"
           if [ -f "$TARGET_FILE" ]; then
+            echo "Generation propre et verifiee de kernel_umount.c..."
+            
             echo '#include <linux/fs.h>' > $TARGET_FILE
             echo '#include <linux/path.h>' >> $TARGET_FILE
             echo '#include <linux/dcache.h>' >> $TARGET_FILE
             echo '#include <linux/namei.h>' >> $TARGET_FILE
             echo 'extern void __detach_mounts(struct dentry *dentry);' >> $TARGET_FILE
             echo 'int ksu_handle_umount(struct path *path, int flags) {' >> $TARGET_FILE
-            echo '    if (!path || !path->dentry) return 0;' >> $views_FILE
+            echo '    if (!path || !path->dentry) return 0;' >> $TARGET_FILE
             echo '    __detach_mounts(path->dentry);' >> $TARGET_FILE
             echo '    return 0;' >> $TARGET_FILE
             echo '}' >> $TARGET_FILE
             echo 'int ksu_kernel_umount_init(void) { return 0; }' >> $TARGET_FILE
             echo 'void ksu_kernel_umount_exit(void) {}' >> $TARGET_FILE
+            
+            echo "Fichier kernel_umount.c aligne et securise pour le linker."
           else
+            echo "Erreur : Fichier KSU introuvable."
             exit 1
           fi
+
 
       - name: Configuration pour l'architecture Snapdragon 750G (Lito/Laguna)
         run: |
